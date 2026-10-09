@@ -34,6 +34,11 @@ jobs:
             echo "::error::Release tag must be a valid Git tag starting with v."
             exit 1
           fi
+          REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
+          if [[ -n "$REMOTE_TAG" ]]; then
+            echo "::error::Manual releases require a new tag; this tag already exists."
+            exit 1
+          fi
 
       - name: Build for Momentum firmware
         uses: flipperdevices/flipperzero-ufbt-action@v0.1
