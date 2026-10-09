@@ -21,6 +21,12 @@ Decrypts encrypted SubGhz keystore files on the Flipper Zero and writes the resu
    - **SD card:** `qFlipper` → **SD Card** → `apps/Utilities/` (or any app folder you use)
    - Or place it in the same location as other external apps in your firmware layout.
 
+### Automated builds and releases
+
+- Every push and pull request builds the FAP for Momentum firmware. Open the completed **Build and release FAP** run under **Actions**, then download **mfkeys-decrypt-fap** from **Artifacts** or the build summary link. Extract the ZIP to get the `.fap`; artifact downloads require signing in to GitHub.
+- To publish a GitHub release, push a tag starting with `v` (for example, `v1.0.0`), or select **Run workflow** and supply a new `release_tag` starting with `v`. A manual run publishes the selected ref's commit and creates the tag if it does not exist.
+- Ordinary branch pushes and pull requests only upload artifacts; they do not create releases. Published `.fap` files are available under **Releases**.
+
 ## How to use
 
 ### 1. Put your keystore files in the keystore folder

@@ -8,6 +8,11 @@ on:
       - "v*"
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag starting with v (for example, v1.0.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -20,6 +25,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate manual release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ "$RELEASE_TAG" != v?* ]] || ! git check-ref-format "refs/tags/$RELEASE_TAG"; then
+            echo "::error::Release tag must be a valid Git tag starting with v."
+            exit 1
+          fi
+
       - name: Build for Momentum firmware
         uses: flipperdevices/flipperzero-ufbt-action@v0.1
         id: build
@@ -28,15 +43,22 @@ jobs:
           sdk-channel: release
 
       - name: Upload FAP artifact
+        id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: mfkeys-decrypt-fap
           path: ${{ steps.build.outputs.fap-artifacts }}
           if-no-files-found: error
 
+      - name: Show artifact download link
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          printf '## FAP download\n\n[Download mfkeys-decrypt-fap](%s)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -51,7 +73,9 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ inputs.release_tag || github.ref_name }}
           generate_release_notes: true
           files: dist/*.fap
           fail_on_unmatched_files: true
