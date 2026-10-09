@@ -34,9 +34,12 @@ jobs:
             echo "::error::Release tag must be a valid Git tag starting with v."
             exit 1
           fi
-          REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
-          if [[ -n "$REMOTE_TAG" ]]; then
-            echo "::error::Manual releases require a new tag; this tag already exists."
+          REMOTE_TAG=$(git ls-remote origin "refs/tags/$RELEASE_TAG^{}" | awk 'NR == 1 { print $1 }')
+          if [[ -z "$REMOTE_TAG" ]]; then
+            REMOTE_TAG=$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG" | awk 'NR == 1 { print $1 }')
+          fi
+          if [[ -n "$REMOTE_TAG" && "$REMOTE_TAG" != "$GITHUB_SHA" ]]; then
+            echo "::error::Manual releases cannot reuse a tag pointing to a different commit."
             exit 1
           fi
 
@@ -69,11 +72,52 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
       - name: Download FAP artifact
         uses: actions/download-artifact@v4.1.3
         with:
           name: mfkeys-decrypt-fap
           path: dist
+
+      - name: Create or verify release tag
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          TAG_REF="refs/tags/$RELEASE_TAG"
+          remote_tag_commit() {
+            local tag_ref="$1"
+            local remote_tag
+            remote_tag=$(git ls-remote origin "$tag_ref^{}" | awk 'NR == 1 { print $1 }')
+            if [[ -z "$remote_tag" ]]; then
+              remote_tag=$(git ls-remote --refs origin "$tag_ref" | awk 'NR == 1 { print $1 }')
+            fi
+            printf '%s' "$remote_tag"
+          }
+
+          EXISTING_TAG=$(remote_tag_commit "$TAG_REF")
+          if [[ -n "$EXISTING_TAG" ]]; then
+            if [[ "$EXISTING_TAG" != "$GITHUB_SHA" ]]; then
+              echo "::error::Release tag already points to a different commit."
+              exit 1
+            fi
+          elif ! git push origin "$GITHUB_SHA:$TAG_REF"; then
+            EXISTING_TAG=$(remote_tag_commit "$TAG_REF")
+            if [[ "$EXISTING_TAG" != "$GITHUB_SHA" ]]; then
+              echo "::error::Could not create release tag; it points to a different commit or could not be verified."
+              exit 1
+            fi
+          fi
+
+          VERIFIED_TAG=$(remote_tag_commit "$TAG_REF")
+          if [[ "$VERIFIED_TAG" != "$GITHUB_SHA" ]]; then
+            echo "::error::Release tag does not point to this build's commit."
+            exit 1
+          fi
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
