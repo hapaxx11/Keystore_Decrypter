@@ -43,7 +43,7 @@ jobs:
       contents: write
     steps:
       - name: Download FAP artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: mfkeys-decrypt-fap
           path: dist
